@@ -28,7 +28,7 @@ class QueryRequest(BaseModel):
 # bge-base embedding model
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-base-en-v1.5")
 # ollama
-Settings.llm = Ollama(model="granite3-dense:8b", request_timeout=360.0)
+Settings.llm = Ollama(model="granite3.1-dense:8b", request_timeout=360.0)
 
 PERSIST_DIR = "./storage"
 print("Loading documents...")
@@ -49,7 +49,7 @@ query_engine = index.as_query_engine()
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["POST"],  # Allow all HTTP methods (e.g., GET, POST, OPTIONS)
     allow_headers=["*"],  # Allow all headers (e.g., Content-Type, Authorization)
@@ -71,4 +71,4 @@ async def health():
 # Run the API
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

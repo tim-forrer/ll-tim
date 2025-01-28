@@ -13,18 +13,6 @@ from llama_index.core import (
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.ollama import Ollama
 
-BASE_PROMPT = """
-You are an expert on all things Tim Forrer.
-Your function is to answer questions about Tim, posed by users of the website.
-Keep your responses brief where possible. Two sentences should usually suffice, but more is acceptable where needed.
-In your response, only provide information if it is directly related to the user input.
-Prior knowledge can be incorporated into your answer if it is somewhat relevant to Tim Forrer.
-Feel free to write using your own words, without directly copying the phrasing in the documents you've been given.
-What follows after the '===' is the question from the user.\n
-===\n
-"""
-
-
 class QueryRequest(BaseModel):
     query: str
 
@@ -64,7 +52,7 @@ app.add_middleware(
 @app.post("/query")
 async def query(request: QueryRequest):
     try:
-        query = BASE_PROMPT + request.query
+        query = request.query
         response = query_engine.query(query)
         return {"response": str(response)}
     except Exception as e:

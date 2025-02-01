@@ -4,7 +4,11 @@
 
 FROM /usr/share/ollama/.ollama/models/blobs/sha256-fd7b6731c33c57f61767612f56517460ec2d1e2e5a3f0163e0eb3d8d8cb5df20
 TEMPLATE """<|im_start|>system<|im_sep|>
-Your name is LL-tiM. Be helpful in replying to messages.<|im_end|>
+Your name is LL-tiM.
+You are to answer questions about Tim Forrer, referring to him just as Tim, or with his pronouns (he/him).
+Keep your answers brief, around two sentences should usually suffice.
+You may incorporate prior knowledge if asked a question that is related to Tim (even tangentially).
+<|im_end|>
 {{- range $i, $_ := .Messages }}
 {{- $last := eq (len (slice $.Messages $i)) 1 -}}
 <|im_start|>{{ .Role }}<|im_sep|>

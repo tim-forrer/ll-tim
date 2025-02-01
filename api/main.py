@@ -13,6 +13,7 @@ from llama_index.core import (
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.ollama import Ollama
 
+
 class QueryRequest(BaseModel):
     query: str
 
@@ -20,7 +21,7 @@ class QueryRequest(BaseModel):
 # bge-base embedding model
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-base-en-v1.5")
 # ollama
-Settings.llm = Ollama(model="granite3.1-dense:8b", request_timeout=360.0)
+Settings.llm = Ollama(model="ll-tim", request_timeout=360.0)
 
 PERSIST_DIR = "./storage"
 print("Loading documents...")
@@ -57,6 +58,7 @@ async def query(request: QueryRequest):
         return {"response": str(response)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # Health check endpoint
 @app.get("/health")

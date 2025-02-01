@@ -2,3 +2,4 @@
 *.DS_STORE
 storage/
 *__pycache__
+*.out

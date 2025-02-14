@@ -19,8 +19,7 @@ dotenv.load_dotenv()
 # Model parameters
 DOCS_DIR = "./docs"
 PERSIST_DIR = "./storage"
-LLM_MODEL = "llama3.2:1b"
-# LLM_MODEL = "llama3-groq-tool-use"
+LLM_MODEL = "ll-time:latest"
 EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 
 # Load LLM + embedding model

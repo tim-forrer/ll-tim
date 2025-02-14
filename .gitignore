@@ -4,3 +4,4 @@ storage/
 *__pycache__
 *.out
 .env
+*.ipynb_checkpoints

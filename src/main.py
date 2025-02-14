@@ -1,3 +1,4 @@
+import traceback
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -25,9 +26,14 @@ app.add_middleware(
 @app.post("/query")
 async def query(request: QueryRequest):
     try:
-        response = graph.invoke({"question": request.query})
-        return {"response": str(response["answer"])}
+        messages = graph.invoke(
+            {"messages": [{"role": "user", "content": request.query}]}
+        )
+        response = messages["messages"][-1].content
+        return {"response": response}
     except Exception as e:
+        print("Error occured:", e)
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

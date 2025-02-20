@@ -2,7 +2,7 @@ import traceback
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from lltim import create_graph  # type: ignore
+from lltim import get_qa_chain
 
 
 class QueryRequest(BaseModel):
@@ -11,8 +11,6 @@ class QueryRequest(BaseModel):
 
 ORGINS = ["https://tim-forrer.vercel.app", "http://localhost:3000"]
 
-
-graph = create_graph()
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -22,14 +20,12 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers (e.g., Content-Type, Authorization)
 )
 
+qa_chain = get_qa_chain()
 
 @app.post("/query")
 async def query(request: QueryRequest):
     try:
-        messages = graph.invoke(
-            {"messages": [{"role": "user", "content": request.query}]}
-        )
-        response = messages["messages"][-1].content
+        response = qa_chain.invoke(request.query)
         return {"response": response}
     except Exception as e:
         print("Error occured:", e)
@@ -46,5 +42,4 @@ async def health():
 # Run the API
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="127.0.0.1", port=8001)

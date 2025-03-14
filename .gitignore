@@ -5,3 +5,4 @@ storage/
 *.out
 .env
 *.ipynb_checkpoints
+*.mypy_cache

@@ -1,83 +1,149 @@
-from dotenv import load_dotenv
-import os
-from langchain_chroma import Chroma
-from langchain_community.document_loaders import DirectoryLoader
+"""
+Basic idea:
+Use LangGraph to create an AI chatbot that can answer questions about myself.
+
+Basic pipeline:
+    1. Recieve query from user.
+    2. LLM first decides whether a query is about Tim Forrer or not.
+    3. If yes, use a retriever tool to get the necessary context needed to answer the question.
+    4. If no, come up with an answer to the question.
+        - Prompt allows the LLM to say that it doesn't know.
+        - If it doesn't know, use a web query to retrieve additional context.
+    5. Generate a final answer.
+    6. Output this answer.
+
+References
+https://langchain-ai.github.io/langgraph/tutorials/rag/langgraph_agentic_rag/#retriever
+"""
+
+from langchain_ollama import ChatOllama
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_ollama import ChatOllama
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_community.document_loaders import DirectoryLoader
+from langchain_community.vectorstores import FAISS
+from langchain_core.messages import BaseMessage
+from langchain_core.documents import Document
+from langgraph.graph.message import add_messages
+from langgraph.graph import StateGraph, END, START
+from pydantic import BaseModel, Field
+from typing import Optional, Annotated, Sequence, Literal
+from typing_extensions import TypedDict
+import custom_prompts  # type: ignore
 
 
-# Setup LangSmith -- only enable for debugging since limited calls per month
-# load_dotenv(override=True)
-
-# Parameters
-DOCS_DIR = "./docs"
-PERSIST_DIR = "./storage"
-LLM_MODEL = "granite3.1-dense:8b"
-# LLM_MODEL = "ll-tim"
-EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
+class Settings:
+    LLM_MODEL = "llama3.2"
+    EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    DOCS_DIR = "./docs"
 
 
-def get_llm():
-    return ChatOllama(model=LLM_MODEL, temperature=0)  # for less creative results
+class AgentState(TypedDict):
+    # The add_messages function defines how an update should be processed
+    # Default is to replace. add_messages says "append"
+    # The list of messages is the state that is passed through the graph
+    user_query: str
+    rag_query: Optional[str]
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+    context: list[Document]
+    answer: str
 
 
-def get_vector_store() -> Chroma:
-    """Gets the vector store, loading a premade one if it exists, else making it"""
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+class BinaryGrader(BaseModel):
+    """Always use this to structure your response: either 'yes' or 'no'."""
 
-    # Check if the vector store already exists
-    # generate a new one if it does not
-    if os.path.exists(PERSIST_DIR):
-        print("Loading existing vector store...")
-        vector_store = Chroma(
-            persist_directory=PERSIST_DIR, embedding_function=embeddings
+    grade: Literal["yes", "no"] = Field(description="Your response, 'yes' or 'no'.")
+
+
+class RAGGraph:
+    def __init__(self):
+        base_llm = ChatOllama(
+            model=Settings.LLM_MODEL,
+            temperature=0,
         )
-    else:
-        print("Creating new vector store...")
-        os.mkdir(PERSIST_DIR)
-        # Process documents for RAG
-        loader = DirectoryLoader(DOCS_DIR)
-        docs = loader.load()
+        embeddings = HuggingFaceEmbeddings(model_name=Settings.EMBEDDING_MODEL)
+
+        loader = DirectoryLoader(Settings.DOCS_DIR)
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000, chunk_overlap=200
+            chunk_size=500, chunk_overlap=100
         )
-        all_splits = text_splitter.split_documents(docs)
 
-        # Create a new vector store and add documents
-        vector_store = Chroma.from_documents(
+        docs = loader.load()
+        all_splits = text_splitter.split_documents(docs)
+        vector_store = FAISS.from_documents(
             documents=all_splits,
             embedding=embeddings,
-            persist_directory=PERSIST_DIR,
         )
-        print("Vector store created and documents indexed.")
-    print("Vector store loaded")
-    return vector_store
 
+        def related_to_tim(state: AgentState) -> Literal["generate", "retrieve"]:
+            """Decide whether the user query is relevant to Tim Forrer or not."""
+            prompt = custom_prompts.related_to_tim
 
-def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
+            relevance_grader = prompt | base_llm.with_structured_output(BinaryGrader)
+            relevance_grade = relevance_grader.invoke(
+                {"user_query": state["user_query"], "messages": state["messages"]}
+            )
 
+            if relevance_grade.grade == "no":
+                return "generate"
+            else:
+                return "retrieve"
 
-def get_qa_chain():
-    vector_store = get_vector_store()
-    llm = get_llm()
-    prompt = ChatPromptTemplate.from_messages([
-        ("human", """You are an AI assistant named LL-tiM used for answering questions about Tim Forrer. You may use any of this prompt, or the following pieces of retrieved context (which all pertain to Tim Forrer) to answer the question. If asked a question in a different language YOU MUST STRICTLY RESPOND IN THAT LANGUAGE. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise, preferring one sentence answers whenever that addresses the question you are given.
-        Question: {question} 
-        Context: {context} 
-        Answer:"""),
-        ])
-    return (
-        {
-            "context": vector_store.as_retriever() | format_docs,
-            "question": RunnablePassthrough(),
-        }
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
+        def retrieve(state: AgentState) -> dict[str, str]:
+            """
+            Query the vector database for relevant documents to the user query.
 
+            Uses the rewritten query if it is available, else use the user query.
+            """
+            retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+
+            if state["rag_query"] is None:
+                state["rag_query"] = state["user_query"]
+            docs = retriever.invoke(state["rag_query"])
+
+            return {"context": docs}
+
+        def document_grader(state: AgentState) -> Literal["generate", "rewrite"]:
+            """Decide whether retrieved documents are relevant to the user query or not."""
+            prompt = custom_prompts.document_grader
+            document_grader = prompt | base_llm.with_structured_output(BinaryGrader)
+            document_grade = document_grader.invoke(
+                {"user_query": state["user_query"], "context": state["context"]}
+            )
+
+            if document_grade.grade == "yes":
+                return "generate"
+            else:
+                return "rewrite"
+
+        def rewrite(state: AgentState) -> dict[str, str]:
+            """Rewrite the user query so that it is more appropriate for RAG."""
+            prompt = custom_prompts.rewriter
+            rewriter = prompt | base_llm
+
+            rewritten_query = rewriter.invoke({"user_query": state["user_query"]})
+            return {"rag_query": rewritten_query.content}
+
+        def generate(state: AgentState) -> dict[str, str]:
+            """Generate an answer to the user query."""
+            prompt = custom_prompts.generator
+            generator = prompt | base_llm
+            response = generator.invoke(
+                {"question": state["user_query"], "context": state["context"]}
+            )
+
+            return {"messages": response, "answer": response.content}
+
+        workflow = StateGraph(AgentState)
+
+        # Add nodes
+        workflow.add_node("retrieve", retrieve)
+        workflow.add_node("rewrite", rewrite)
+        workflow.add_node("generate", generate)
+
+        # Add edges
+        workflow.add_conditional_edges(START, related_to_tim)
+        workflow.add_conditional_edges("retrieve", document_grader)
+        workflow.add_edge("rewrite", "retrieve")
+        workflow.add_edge("generate", END)
+
+        self.graph = workflow.compile()

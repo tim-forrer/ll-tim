@@ -2,7 +2,6 @@ import traceback
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from lltim import get_qa_chain
 
 
 class QueryRequest(BaseModel):
@@ -20,26 +19,26 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers (e.g., Content-Type, Authorization)
 )
 
-qa_chain = get_qa_chain()
+# qa_chain = get_qa_chain()
 
-@app.post("/query")
-async def query(request: QueryRequest):
-    try:
-        response = qa_chain.invoke(request.query)
-        return {"response": response}
-    except Exception as e:
-        print("Error occured:", e)
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# Health check endpoint
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
+# @app.post("/query")
+# async def query(request: QueryRequest):
+#     try:
+#         response = qa_chain.invoke(request.query)
+#         return {"response": response}
+#     except Exception as e:
+#         print("Error occured:", e)
+#         traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Run the API
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8001)
+# # Health check endpoint
+# @app.get("/health")
+# async def health():
+#     return {"status": "healthy"}
+
+
+# # Run the API
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run(app, host="127.0.0.1", port=8001)

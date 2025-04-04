@@ -1,0 +1,7 @@
+POST http://localhost:8001/query
+Content-Type: application/json
+
+{
+  "query": "What experience does Tim Forrer have?",
+  "uuid": 123
+}
